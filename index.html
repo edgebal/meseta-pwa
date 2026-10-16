@@ -174,7 +174,7 @@ $('start').onclick=async()=>{
     window.addEventListener('deviceorientationabsolute',onOrient,true);
     navigator.geolocation.watchPosition(p=>{
       pos={lat:p.coords.latitude,lon:p.coords.longitude,alt:p.coords.altitude};
-      if(!meMarker){meMarker=L.circleMarker([pos.lat,pos.lon],{radius:6,color:'#7fb4c9',fillColor:'#7fb4c9',fillOpacity:1}).addTo(map);map.setView([pos.lat,pos.lon],11)}
+      if(!meMarker){meMarker=L.circleMarker([pos.lat,pos.lon],{radius:6,color:'#7fb4c9',fillColor:'#7fb4c9',fillOpacity:1}).addTo(map);map.setView([pos.lat,pos.lon],10);renderSensors()}
       else meMarker.setLatLng([pos.lat,pos.lon]);
       $('go').disabled=false;$('lock').disabled=false;
       status(`GPS ±${Math.round(p.coords.accuracy)} m`);
@@ -198,6 +198,16 @@ function renderSensors(){
   $('heading').firstChild.nodeValue=h==null?'---':String(Math.round(h)).padStart(3,'0')+'°';
   $('pitch').textContent=pitch==null?'--°':pitch.toFixed(1)+'°';
   if(hit && pitch!=null) $('pitchbox').classList.toggle('match',Math.abs(pitch-hit.angle)<1.5);
+  updateLiveRay(h);
+}
+
+// Rayo en vivo: sigue la brújula en el mapa; el cálculo pesado solo con el botón
+let liveRay=null, lastRayAt=0;
+function updateLiveRay(h){
+  if(!pos||h==null) return;
+  const now=performance.now(); if(now-lastRayAt<100) return; lastRayAt=now;
+  const end=dest(pos.lat,pos.lon,h,MAX_KM*1000), ll=[[pos.lat,pos.lon],end];
+  if(!liveRay) liveRay=L.polyline(ll,{color:'#efe9df',weight:2,opacity:.8}).addTo(map); else liveRay.setLatLngs(ll);
 }
 
 $('lock').onclick=()=>{locked=!locked;if(locked)lockedHeading=heading;$('lock').textContent=locked?'Soltar':'Fijar';renderSensors()};
