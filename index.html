@@ -126,7 +126,23 @@ button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 // ---------- Parámetros ----------
 const STEP_M = 500, MAX_KM = 40;           // muestreo del rayo: 80 puntos (límite de OpenTopoData: 100)
 const EYE_M = 1.7, R_EFF = 6371000 * 7/6; // refracción atmosférica estándar
-const ELEV_API = 'https://api.opentopodata.org/v1/srtm30m?locations=';
+// Fuentes de cotas, en orden; todas aceptan CORS. Cada una recibe [[lat,lon],...] y devuelve [m,...]
+const ELEV_SOURCES = [
+  ['Open-Meteo', async ll=>{
+    const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${ll.map(p=>p[0].toFixed(5))}&longitude=${ll.map(p=>p[1].toFixed(5))}`);
+    const j=await r.json(); if(!j.elevation) throw new Error(j.reason||'sin datos'); return j.elevation; }],
+  ['OpenTopoData', async ll=>{
+    const r=await fetch('https://api.opentopodata.org/v1/srtm30m',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({locations:ll.map(p=>p.join(',')).join('|')})});
+    const j=await r.json(); if(j.status!=='OK') throw new Error(j.error||j.status); return j.results.map(x=>x.elevation??0); }],
+  ['Open-Elevation', async ll=>{
+    const r=await fetch('https://api.open-elevation.com/api/v1/lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({locations:ll.map(p=>({latitude:p[0],longitude:p[1]}))})});
+    const j=await r.json(); return j.results.map(x=>x.elevation); }],
+];
+async function getElevations(ll){
+  const errs=[];
+  for(const [name,fn] of ELEV_SOURCES){ try{ const e=await fn(ll); if(e.length===ll.length) return e; errs.push(name+': respuesta incompleta'); }catch(e){ errs.push(name+': '+e.message) } }
+  throw new Error('Cotas no disponibles — '+errs.join(' · '));
+}
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
 
 // ---------- Estado ----------
@@ -199,9 +215,7 @@ async function identify(){
   busy=true;$('go').disabled=true;status('Leyendo relieve…');
   try{
     const pts=[];for(let d=0;d<=MAX_KM*1000;d+=STEP_M)pts.push([d,...dest(pos.lat,pos.lon,h,d)]);
-    const r=await fetch(ELEV_API+pts.map(p=>p[1].toFixed(5)+','+p[2].toFixed(5)).join('|'));
-    const j=await r.json(); if(j.status!=='OK') throw new Error('Elevación: '+(j.error||j.status));
-    const el=j.results.map(x=>x.elevation??0);
+    const el=await getElevations(pts.map(p=>[p[1],p[2]]));
     const h0=el[0]+EYE_M;
     // ángulo de elevación de cada punto, con curvatura+refracción; el horizonte visible es el máximo acumulado
     let best=-1,bi=0,maxSoFar=-90,vis=[];
@@ -217,10 +231,11 @@ async function identify(){
     drawProfile(pts,el,ang,vis,ti,bi);
     drawMap(pts,ti);
     status('Buscando nombre en OSM…');
-    const name=await lookupName(hit.lat,hit.lon);
+    let name=null, nameErr=null;
+    try{ name=await lookupName(hit.lat,hit.lon) }catch(e){ nameErr='OSM: '+e.message }
     $('name').textContent=name||'Sin nombre en OSM';$('name').classList.toggle('none',!name);
     $('facts').innerHTML=`<span>Distancia <b>${(hit.d/1000).toFixed(1)} km</b></span><span>Cota <b>${Math.round(hit.elev)} m</b></span><span>Desnivel <b>+${Math.round(hit.elev-el[0])} m</b></span><span>Ángulo <b>${hit.angle.toFixed(1)}°</b></span><span>Azimut <b>${Math.round(h)}°</b></span>`;
-    status(name?'Listo':'Relieve ubicado, sin topónimo cercano');
+    status(name?'Listo':(nameErr||'Relieve ubicado, sin topónimo cercano'));
   }catch(e){status(e.message)}
   busy=false;$('go').disabled=false;renderSensors();
 }
