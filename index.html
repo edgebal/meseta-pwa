@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1a16">
+<title>Qué Meseta Es</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;600&display=swap">
+<style>
+/* Layout: brújula arriba, lectura al medio, perfil + mapa abajo. Una pantalla, sin scroll de cuerpo. */
+:root{
+  --bg:#1c1a16; --panel:#262320; --line:#3a352f;
+  --fg:#efe9df; --muted:#a39a8b;
+  --accent:#e3a23a;   /* ocre meseta */
+  --accent2:#7fb4c9;  /* cielo */
+  --ok:#8fbf6a; --warn:#d9825f;
+  --display:"Barlow Condensed",system-ui,sans-serif;
+  --body:"Barlow",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--fg);font:15px/1.4 var(--body);
+  display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  overflow:hidden;
+}
+header{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:10px max(16px,env(safe-area-inset-right,0px)) 6px max(16px,env(safe-area-inset-left,0px));
+}
+h1{margin:0;font:700 22px/1 var(--display);letter-spacing:.02em;text-transform:uppercase}
+#status{font-size:12px;color:var(--muted);min-width:0;text-align:right}
+
+#compass{
+  position:relative;display:grid;place-items:center;
+  padding:4px 16px;
+}
+#compass svg{width:min(54vw,230px);height:auto;max-width:100%}
+#heading{
+  position:absolute;inset:0;display:grid;place-items:center;
+  font:700 44px/1 var(--display);font-variant-numeric:tabular-nums;
+}
+#heading small{display:block;font:500 13px/1 var(--display);color:var(--muted);letter-spacing:.1em;text-align:center;margin-top:4px}
+
+#reading{
+  margin:4px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;min-height:74px;
+}
+#name{font:700 24px/1.05 var(--display);text-wrap:balance;min-width:0;overflow-wrap:anywhere}
+#name.none{color:var(--muted);font-weight:500}
+#facts{font-size:12px;color:var(--muted);grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 14px;font-variant-numeric:tabular-nums}
+#facts b{color:var(--fg);font-weight:600}
+#pitchbox{text-align:right;font-variant-numeric:tabular-nums;line-height:1.1}
+#pitchbox .v{font:700 20px/1 var(--display)}
+#pitchbox .l{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+#pitchbox.match .v{color:var(--ok)}
+
+#profile{
+  margin:8px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));
+  height:96px;width:auto;display:block;max-width:100%;
+}
+#map{flex:1;min-height:140px;margin-top:8px;background:#2b2b2b}
+
+#actions{
+  display:flex;gap:8px;
+  padding:8px max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px));
+}
+button{
+  flex:1;font:700 17px/1 var(--display);letter-spacing:.06em;text-transform:uppercase;
+  background:var(--accent);color:#1c1a16;border:0;border-radius:8px;padding:14px 10px;
+}
+button.sec{background:transparent;color:var(--fg);border:1px solid var(--line);flex:0 0 auto}
+button:disabled{opacity:.45}
+button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+
+.leaflet-container{font:12px var(--body);background:#2b2b2b}
+.leaflet-tile{filter:brightness(.85) saturate(.9)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Qué meseta es</h1>
+  <div id="status">Tocá Iniciar para activar sensores</div>
+</header>
+
+<div id="compass">
+  <svg viewBox="0 0 200 200" aria-hidden="true">
+    <circle cx="100" cy="100" r="92" fill="var(--panel)" stroke="var(--line)" stroke-width="2"/>
+    <g id="rose" transform="rotate(0 100 100)" fill="var(--muted)" font-family="Barlow Condensed" font-weight="700" font-size="16" text-anchor="middle">
+      <text x="100" y="26" fill="var(--accent)">N</text><text x="180" y="106">E</text>
+      <text x="100" y="184">S</text><text x="20" y="106">O</text>
+      <g id="ticks" stroke="var(--line)" stroke-width="2"></g>
+    </g>
+    <polygon points="100,10 94,24 106,24" fill="var(--accent)"/>
+  </svg>
+  <div id="heading">---<small>AZIMUT</small></div>
+</div>
+
+<div id="reading">
+  <div id="name" class="none">Apuntá el teléfono a la meseta</div>
+  <div id="pitchbox"><div class="v" id="pitch">--°</div><div class="l">inclinación</div></div>
+  <div id="facts"></div>
+</div>
+
+<canvas id="profile" width="400" height="96" aria-label="Perfil del relieve en la dirección apuntada"></canvas>
+<div id="map"></div>
+
+<div id="actions">
+  <button id="start">Iniciar</button>
+  <button id="go" disabled>Identificar</button>
+  <button id="lock" class="sec" disabled>Fijar</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ---------- Parámetros ----------
+const STEP_M = 500, MAX_KM = 40;           // muestreo del rayo: 80 puntos (límite de OpenTopoData: 100)
+const EYE_M = 1.7, R_EFF = 6371000 * 7/6; // refracción atmosférica estándar
+const ELEV_API = 'https://api.opentopodata.org/v1/srtm30m?locations=';
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
+
+// ---------- Estado ----------
+let pos=null, heading=null, pitch=null, locked=false, lockedHeading=null, busy=false;
+const $=id=>document.getElementById(id);
+const status=t=>$('status').textContent=t;
+
+// ---------- Brújula (ticks) ----------
+(()=>{let s='';for(let a=0;a<360;a+=10){const r=a%90?84:78;s+=`<line x1="100" y1="${100-92}" x2="100" y2="${100-r}" transform="rotate(${a} 100 100)"/>`}$('ticks').innerHTML=s})();
+
+// ---------- Mapa ----------
+const map=L.map('map',{zoomControl:false,attributionControl:true}).setView([-31.4,-64.2],9);
+L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:15,subdomains:'abc',
+  attribution:'© OpenStreetMap, SRTM · OpenTopoMap (CC-BY-SA)'}).addTo(map);
+let meMarker=null, ray=null, hit=null;
+
+// ---------- Sensores ----------
+$('start').onclick=async()=>{
+  try{
+    if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
+      const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted') throw new Error('Sin permiso de orientación');
+    }
+    if(typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission){ try{await DeviceMotionEvent.requestPermission()}catch{} }
+    window.addEventListener('deviceorientation',onOrient,true);
+    window.addEventListener('deviceorientationabsolute',onOrient,true);
+    navigator.geolocation.watchPosition(p=>{
+      pos={lat:p.coords.latitude,lon:p.coords.longitude,alt:p.coords.altitude};
+      if(!meMarker){meMarker=L.circleMarker([pos.lat,pos.lon],{radius:6,color:'#7fb4c9',fillColor:'#7fb4c9',fillOpacity:1}).addTo(map);map.setView([pos.lat,pos.lon],11)}
+      else meMarker.setLatLng([pos.lat,pos.lon]);
+      $('go').disabled=false;$('lock').disabled=false;
+      status(`GPS ±${Math.round(p.coords.accuracy)} m`);
+    },e=>status('GPS: '+e.message),{enableHighAccuracy:true,maximumAge:5000,timeout:20000});
+    $('start').disabled=true; status('Esperando GPS…');
+  }catch(e){status(e.message)}
+};
+
+function onOrient(e){
+  let h=null;
+  if(e.webkitCompassHeading!=null) h=e.webkitCompassHeading;           // iOS: ya es azimut verdadero-ish
+  else if(e.absolute && e.alpha!=null) h=(360-e.alpha)%360;              // Android
+  if(h!=null && !locked){heading=h}
+  // Teléfono vertical en retrato: beta≈90 mirando al horizonte. Inclinación hacia arriba = beta-90.
+  if(e.beta!=null) pitch=e.beta-90;
+  renderSensors();
+}
+function renderSensors(){
+  const h=locked?lockedHeading:heading;
+  $('rose').setAttribute('transform',`rotate(${h==null?0:-h} 100 100)`);
+  $('heading').firstChild.nodeValue=h==null?'---':String(Math.round(h)).padStart(3,'0')+'°';
+  $('pitch').textContent=pitch==null?'--°':pitch.toFixed(1)+'°';
+  if(hit && pitch!=null) $('pitchbox').classList.toggle('match',Math.abs(pitch-hit.angle)<1.5);
+}
+
+$('lock').onclick=()=>{locked=!locked;if(locked)lockedHeading=heading;$('lock').textContent=locked?'Soltar':'Fijar';renderSensors()};
+
+// ---------- Geodesia ----------
+const rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI;
+function dest(lat,lon,brg,d){ // punto a distancia d (m) y rumbo brg
+  const R=6371000,φ1=rad(lat),λ1=rad(lon),θ=rad(brg),δ=d/R;
+  const φ2=Math.asin(Math.sin(φ1)*Math.cos(δ)+Math.cos(φ1)*Math.sin(δ)*Math.cos(θ));
+  const λ2=λ1+Math.atan2(Math.sin(θ)*Math.sin(δ)*Math.cos(φ1),Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
+  return [deg(φ2),deg(λ2)];
+}
+
+// ---------- Identificar ----------
+$('go').onclick=identify;
+async function identify(){
+  const h=locked?lockedHeading:heading;
+  if(!pos||h==null||busy) return;
+  busy=true;$('go').disabled=true;status('Leyendo relieve…');
+  try{
+    const pts=[];for(let d=0;d<=MAX_KM*1000;d+=STEP_M)pts.push([d,...dest(pos.lat,pos.lon,h,d)]);
+    const r=await fetch(ELEV_API+pts.map(p=>p[1].toFixed(5)+','+p[2].toFixed(5)).join('|'));
+    const j=await r.json(); if(j.status!=='OK') throw new Error('Elevación: '+(j.error||j.status));
+    const el=j.results.map(x=>x.elevation??0);
+    const h0=el[0]+EYE_M;
+    // ángulo de elevación de cada punto, con curvatura+refracción; el horizonte visible es el máximo acumulado
+    let best=-1,bi=0,maxSoFar=-90,vis=[];
+    const ang=pts.map(([d],i)=>i===0?-90:deg(Math.atan2(el[i]-h0-d*d/(2*R_EFF),d)));
+    ang.forEach((a,i)=>{ if(i===0)return; vis.push(a>=maxSoFar-0.05); if(a>maxSoFar){maxSoFar=a} if(a>best){best=a;bi=i} });
+    // Si el usuario inclina el teléfono, preferimos el punto visible cuyo ángulo coincide con la inclinación
+    let ti=bi;
+    if(pitch!=null && pitch>-10 && pitch<30){
+      let bd=1e9;for(let i=1;i<ang.length;i++){ if(!vis[i-1])continue; const dd=Math.abs(ang[i]-pitch); if(dd<bd){bd=dd;ti=i} }
+      if(bd>2.5) ti=bi; // sin coincidencia razonable: usar la cresta del horizonte
+    }
+    hit={i:ti,d:pts[ti][0],lat:pts[ti][1],lon:pts[ti][2],elev:el[ti],angle:ang[ti],skyline:bi};
+    drawProfile(pts,el,ang,vis,ti,bi);
+    drawMap(pts,ti);
+    status('Buscando nombre en OSM…');
+    const name=await lookupName(hit.lat,hit.lon);
+    $('name').textContent=name||'Sin nombre en OSM';$('name').classList.toggle('none',!name);
+    $('facts').innerHTML=`<span>Distancia <b>${(hit.d/1000).toFixed(1)} km</b></span><span>Cota <b>${Math.round(hit.elev)} m</b></span><span>Desnivel <b>+${Math.round(hit.elev-el[0])} m</b></span><span>Ángulo <b>${hit.angle.toFixed(1)}°</b></span><span>Azimut <b>${Math.round(h)}°</b></span>`;
+    status(name?'Listo':'Relieve ubicado, sin topónimo cercano');
+  }catch(e){status(e.message)}
+  busy=false;$('go').disabled=false;renderSensors();
+}
+
+async function lookupName(lat,lon){
+  const q=`[out:json][timeout:15];(
+    nwr(around:3000,${lat},${lon})["natural"~"^(peak|plateau|ridge|hill|cliff|volcano|saddle)$"]["name"];
+    nwr(around:3000,${lat},${lon})["place"~"^(locality|hamlet)$"]["name"];
+    nwr(around:6000,${lat},${lon})["natural"="mountain_range"]["name"];
+  );out center tags 12;`;
+  const r=await fetch(OVERPASS,{method:'POST',body:'data='+encodeURIComponent(q)});
+  const j=await r.json();
+  const pri={plateau:0,peak:1,ridge:2,volcano:2,hill:3,cliff:4,saddle:5,mountain_range:6,locality:7,hamlet:8};
+  const els=j.elements.map(e=>{const c=e.center||e;const t=e.tags;const k=t.natural||t.place;
+    return{name:t.name,k,dist:Math.hypot((c.lat-lat)*111e3,(c.lon-lon)*111e3*Math.cos(rad(lat))),p:pri[k]??9}});
+  els.sort((a,b)=>a.p-b.p||a.dist-b.dist);
+  if(!els.length) return null;
+  const e=els[0]; const label={plateau:'Meseta',peak:'Cerro',ridge:'Cordón',hill:'Loma',cliff:'Barranca',volcano:'Volcán',saddle:'Portezuelo',mountain_range:'Sierra',locality:'Paraje',hamlet:'Paraje'}[e.k]||'';
+  return (label&&!e.name.toLowerCase().startsWith(label.toLowerCase())?label+' ':'')+e.name;
+}
+
+// ---------- Perfil ----------
+function drawProfile(pts,el,ang,vis,ti,bi){
+  const c=$('profile'),W=c.width=c.clientWidth*devicePixelRatio,H=c.height=96*devicePixelRatio,g=c.getContext('2d');
+  const mn=Math.min(...el),mx=Math.max(...el),span=Math.max(mx-mn,50);
+  const X=i=>i/(pts.length-1)*W, Y=v=>H-6-(v-mn)/span*(H-18);
+  g.clearRect(0,0,W,H);
+  g.fillStyle='#262320';g.fillRect(0,0,W,H);
+  g.beginPath();g.moveTo(0,H);el.forEach((v,i)=>g.lineTo(X(i),Y(v)));g.lineTo(W,H);g.closePath();
+  g.fillStyle='#3a352f';g.fill();
+  // tramos visibles desde el observador en ocre
+  g.lineWidth=2*devicePixelRatio;
+  for(let i=1;i<el.length;i++){g.beginPath();g.moveTo(X(i-1),Y(el[i-1]));g.lineTo(X(i),Y(el[i]));g.strokeStyle=vis[i-1]?'#e3a23a':'#6a6256';g.stroke()}
+  // observador y objetivo
+  g.fillStyle='#7fb4c9';g.beginPath();g.arc(X(0),Y(el[0]),3*devicePixelRatio,0,7);g.fill();
+  g.fillStyle='#efe9df';g.beginPath();g.arc(X(ti),Y(el[ti]),4*devicePixelRatio,0,7);g.fill();
+  g.font=`${11*devicePixelRatio}px Barlow`;g.fillStyle='#a39a8b';
+  g.fillText(`${mn} m`,4*devicePixelRatio,H-8);g.fillText(`${mx} m`,4*devicePixelRatio,12*devicePixelRatio);
+  g.textAlign='right';g.fillText(`${MAX_KM} km`,W-4*devicePixelRatio,H-8);
+}
+
+function drawMap(pts,ti){
+  if(ray)map.removeLayer(ray);if(hitMarker)map.removeLayer(hitMarker);
+  ray=L.polyline(pts.map(p=>[p[1],p[2]]),{color:'#7fb4c9',weight:2,dashArray:'4 6'}).addTo(map);
+  hitMarker=L.circleMarker([pts[ti][1],pts[ti][2]],{radius:8,color:'#e3a23a',fillColor:'#e3a23a',fillOpacity:.9}).addTo(map);
+  map.fitBounds(L.latLngBounds([[pos.lat,pos.lon],[pts[ti][1],pts[ti][2]]]),{padding:[30,30]});
+}
+let hitMarker=null;
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
