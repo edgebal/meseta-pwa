@@ -59,6 +59,9 @@ h1{margin:0;font:700 22px/1 var(--display);letter-spacing:.02em;text-transform:u
 #name.none{color:var(--muted);font-weight:500}
 #facts{font-size:12px;color:var(--muted);grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 14px;font-variant-numeric:tabular-nums}
 #facts b{color:var(--fg);font-weight:600}
+#eyerow{grid-column:1/-1;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#eye{width:4.5em;font:600 14px var(--body);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums}
+#eye:focus-visible{outline:2px solid var(--accent2)}
 #pitchbox{text-align:right;font-variant-numeric:tabular-nums;line-height:1.1}
 #pitchbox .v{font:700 20px/1 var(--display)}
 #pitchbox .l{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
@@ -110,6 +113,7 @@ button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
   <div id="name" class="none">Apuntá el teléfono a la meseta</div>
   <div id="pitchbox"><div class="v" id="pitch">--°</div><div class="l">inclinación</div></div>
   <div id="facts"></div>
+  <label id="eyerow">Altura sobre el suelo <input id="eye" type="number" inputmode="decimal" min="0" step="1" value="1.7"> m <span id="eyehint"></span></label>
 </div>
 
 <canvas id="profile" width="400" height="96" aria-label="Perfil del relieve en la dirección apuntada"></canvas>
@@ -216,7 +220,10 @@ async function identify(){
   try{
     const pts=[];for(let d=0;d<=MAX_KM*1000;d+=STEP_M)pts.push([d,...dest(pos.lat,pos.lon,h,d)]);
     const el=await getElevations(pts.map(p=>[p[1],p[2]]));
-    const h0=el[0]+EYE_M;
+    const eye=Math.max(0,parseFloat($('eye').value)||EYE_M);
+    const h0=el[0]+eye;
+    // Sugerencia: altitud GPS (elipsoidal, ±10–25 m de geoide) menos cota del DEM
+    if(pos.alt!=null){ const dz=pos.alt-el[0]; $('eyehint').textContent=dz>5?`GPS sugiere ≈${Math.round(dz)} m (aprox.)`:'' }
     // ángulo de elevación de cada punto, con curvatura+refracción; el horizonte visible es el máximo acumulado
     let best=-1,bi=0,maxSoFar=-90,vis=[];
     const ang=pts.map(([d],i)=>i===0?-90:deg(Math.atan2(el[i]-h0-d*d/(2*R_EFF),d)));
